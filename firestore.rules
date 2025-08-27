@@ -4,16 +4,31 @@ service cloud.firestore {
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
+    function allowedCategories() { return ['food', 'coffee', 'groceries', 'others']; }
+    function allowedPayments() { return ['card', 'cash', 'ewallet']; }
+    function validTx(data) {
+      return data.amount is number
+        && data.amount > 0 && data.amount < 100000
+        && data.currency == 'SGD'
+        && data.categoryId in allowedCategories()
+        && data.paymentMethod in allowedPayments()
+        && data.date is timestamp;
+    }
     match /users/{uid} {
       allow read, write: if isOwner(uid);
       match /categories/{categoryId} {
         allow read, write: if isOwner(uid);
       }
       match /transactions/{txId} {
-        allow read, write: if isOwner(uid)
-          && request.resource.data.amount is number
-          && request.resource.data.amount > 0
-          && request.resource.data.date is timestamp;
+        // Reads: only ownership check
+        allow get, list: if isOwner(uid);
+        // Create: validate tx fields (allow client or server timestamps). Accept timestamps provided by client for personal app simplicity.
+        allow create: if isOwner(uid) && validTx(request.resource.data);
+        // Update: createdAt immutable, other fields valid
+        allow update: if isOwner(uid)
+          && validTx(request.resource.data)
+          && resource.data.createdAt == request.resource.data.createdAt;
+        allow delete: if isOwner(uid);
       }
       match /budgets/{budgetId} {
         allow read, write: if isOwner(uid);
