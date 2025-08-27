@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, Suspense } from 'react';
 import {
   auth, onAuthStateChanged, signOut, db,
   collection, addDoc, serverTimestamp, Timestamp, doc, deleteDoc, getRedirectResult,
@@ -6,6 +6,7 @@ import {
 } from './lib/firebase';
 import type { Tx, CategoryId, PaymentMethod } from './types';
 import { txConverter } from './lib/converters';
+const HomeView = React.lazy(() => import('./HomeView'));
 
 export default function App() {
   const [user, setUser] = useState<null | { uid: string; displayName: string | null }>(null);
@@ -61,6 +62,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [user]);
 
+
   const manualRefresh = async () => {
     if (!user) return;
     try {
@@ -102,16 +104,15 @@ export default function App() {
         view={view}
       />
       {view === 'home' && (
-        <>
-          {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
-          <TxList
+        <Suspense fallback={<div className="card" style={{ padding:20 }}>Loading…</div>}>
+          <HomeView
             uid={user.uid}
             txs={txs}
             onDeleted={(id) => setTxs(prev => prev.filter(t => t.id !== id))}
             onSelect={(tx) => { setEditingTx(tx); setView('edit'); }}
           />
-          <InstallHint />
-        </>
+          {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
+        </Suspense>
       )}
       {view === 'add' && (
         <AddTxForm uid={user.uid} onAdded={handleAdded} onCancel={() => setView('home')} />
@@ -373,81 +374,9 @@ function AddTxForm({ uid, onAdded, onCancel }: { uid: string; onAdded: (tx: Tx) 
   );
 }
 
-function TxList({ uid, txs, onDeleted, onSelect }: { uid: string; txs: Tx[]; onDeleted?: (id: string) => void; onSelect?: (tx: Tx) => void }) {
-  const [pendingDel, setPendingDel] = useState<null | { id: string; label: string }>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [delErr, setDelErr] = useState<string | null>(null);
-  // Monthly summary (current month)
-  const now = new Date();
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  const monthlyTotal = txs.reduce((sum, t) => {
-    const d = new Date(t.date?.toDate?.() ?? t.date);
-    return (d.getMonth() === month && d.getFullYear() === year) ? sum + (t.amount || 0) : sum;
-  }, 0);
-  const monthLabel = now.toLocaleString(undefined, { month: 'short', year: 'numeric' });
-  return (
-    <div className="card fade-in" style={{ animationDelay:'.02s' }}>
-      <div className="tx-header">
-        <span>{monthLabel}</span>
-        <span className="tx-amt">${monthlyTotal.toFixed(2)}</span>
-      </div>
-      {txs.length === 0 && <div className="tx-empty">No transactions yet. Use ＋ to add your first.</div>}
-      <ul className="tx-list">
-        {txs.map(t => (
-          <li key={t.id} className="tx-row" onClick={() => onSelect?.(t)} style={{ cursor:'pointer' }}>
-            <div>
-              <div style={{ fontWeight:600 }}>{t.vendor || t.categoryId}</div>
-              <div className="tx-meta">{new Date(t.date?.toDate?.() ?? t.date).toLocaleDateString()} • {t.categoryId}</div>
-            </div>
-            <div className="inline-actions">
-              <div className="tx-amt">${t.amount.toFixed(2)}</div>
-              {t.id && (
-                <button className="icon-btn danger" aria-label="Delete transaction" onClick={(e) => { e.stopPropagation(); setPendingDel({ id: t.id!, label: t.vendor || t.categoryId }); }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M3 6h18" />
-                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    <path d="M10 11v6" />
-                    <path d="M14 11v6" />
-                    <path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-      {pendingDel && (
-        <div className="modal-backdrop">
-          <div className="modal fade-in" role="dialog" aria-modal="true">
-            <h3>Delete Transaction</h3>
-            <p style={{ fontSize: '.85rem', lineHeight:1.4 }}>Are you sure you want to delete <strong>{pendingDel.label}</strong>? This action cannot be undone.</p>
-            {delErr && <div className="alert-error" style={{ marginTop:8 }}>Delete failed: {delErr}</div>}
-            <div className="modal-footer">
-              <button className="btn btn-secondary" disabled={deleting} onClick={() => { if (!deleting) { setPendingDel(null); setDelErr(null);} }}>Cancel</button>
-              <button className="btn btn-danger" disabled={deleting} onClick={async () => {
-                if (!pendingDel) return;
-                setDeleting(true);
-                setDelErr(null);
-                try {
-                  await enableNetwork(db).catch(()=>{});
-                  await deleteDoc(doc(db, 'users', uid, 'transactions', pendingDel.id));
-                  onDeleted?.(pendingDel.id);
-                  setPendingDel(null);
-                } catch (e: any) {
-                  setDelErr(e?.code || e?.message || 'error');
-                } finally {
-                  setDeleting(false);
-                  disableNetwork(db).catch(()=>{});
-                }
-              }}>{deleting ? 'Deleting…' : 'Delete'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// HomeView now lazy loaded (see separate file)
+
+// MonthlyChart moved to HomeView
 
 function EditTxForm({ uid, tx, onCancel, onSaved }: { uid: string; tx: Tx; onCancel: () => void; onSaved: (tx: Tx) => void }) {
   const [amount, setAmount] = useState(String(tx.amount));
@@ -553,5 +482,7 @@ function InstallHint() {
     </div>
   );
 }
+
+// Removed DevSeed component (fictitious data seeding) as part of cleanup.
 
 // Legacy inline style constants removed in favor of CSS classes.

@@ -6,7 +6,7 @@ import {
 import {
   initializeFirestore, serverTimestamp, Timestamp,
   collection, addDoc, query, orderBy, doc, deleteDoc, setLogLevel, getDocs,
-  disableNetwork, enableNetwork, updateDoc
+  disableNetwork, enableNetwork, updateDoc, where, writeBatch
 } from 'firebase/firestore';
 
 // Firebase config inserted (public keys are safe to expose in client code)
@@ -72,7 +72,8 @@ export const getGoogleProvider = () => new GoogleAuthProvider();
 export const providers = { get google() { return getGoogleProvider(); } } as const;
 export {
   signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut, serverTimestamp, Timestamp,
-  collection, addDoc, query, orderBy, doc, deleteDoc, getDocs, disableNetwork, enableNetwork, updateDoc
+  collection, addDoc, query, orderBy, doc, deleteDoc, getDocs, disableNetwork, enableNetwork, updateDoc,
+  where, writeBatch
 };
 export { browserLocalPersistence, browserSessionPersistence, inMemoryPersistence, getRedirectResult };
 export { analytics };

@@ -1,0 +1,212 @@
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import type { Tx, CategoryId, PaymentMethod } from './types';
+import { db, enableNetwork, disableNetwork, deleteDoc, doc, addDoc, serverTimestamp, Timestamp, collection, where, query, getDocs, writeBatch } from './lib/firebase';
+
+interface Props { uid: string; txs: Tx[]; onDeleted: (id: string) => void; onSelect: (tx: Tx) => void; }
+
+export default function HomeView({ uid, txs, onDeleted, onSelect }: Props) {
+  return (
+    <>
+      <MonthlyChart txs={txs} />
+      <TxList uid={uid} txs={txs} onDeleted={onDeleted} onSelect={onSelect} />
+  <SeedCleanup uid={uid} txs={txs} onDeleted={onDeleted} />
+      <InstallHint />
+    </>
+  );
+}
+
+function TxList({ uid, txs, onDeleted, onSelect }: { uid: string; txs: Tx[]; onDeleted: (id: string) => void; onSelect: (tx: Tx) => void }) {
+  const [pendingDel, setPendingDel] = useState<null | { id: string; label: string }>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; total: number; items: Tx[]; sortKey: number }>();
+    for (const t of txs) {
+      const d = new Date(t.date?.toDate?.() ?? t.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      if (!map.has(key)) {
+        const label = d.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+        map.set(key, { key, label, total: 0, items: [], sortKey: d.getFullYear()*12 + d.getMonth() });
+      }
+      const bucket = map.get(key)!;
+      bucket.items.push(t);
+      bucket.total += t.amount || 0;
+    }
+    return Array.from(map.values()).sort((a,b) => b.sortKey - a.sortKey);
+  }, [txs]);
+  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set());
+  const initRef = useRef(false);
+  useEffect(() => {
+    if (initRef.current) return;
+    if (!groups.length) return;
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const toCollapse = groups.filter(g => g.key !== currentKey).map(g => g.key);
+    setCollapsedMonths(new Set(toCollapse));
+    initRef.current = true;
+  }, [groups]);
+  const toggleMonth = (key: string) => setCollapsedMonths(prev => { const next = new Set(prev); next.has(key)? next.delete(key): next.add(key); return next; });
+  if (txs.length === 0) return <div className="card fade-in" style={{ animationDelay:'.02s' }}><div className="tx-empty">No transactions yet. Use ＋ to add your first.</div></div>;
+  return (
+    <>
+      {groups.map((g, idx) => {
+        const isCollapsed = collapsedMonths.has(g.key);
+        return (
+          <div key={g.key} className="card fade-in" style={{ animationDelay: `${0.02 + idx*0.02}s` }}>
+            <div className={`tx-header collapsible ${isCollapsed ? 'is-collapsed':''}`} role="button" tabIndex={0} aria-expanded={!isCollapsed} aria-controls={`month-${g.key}`} onClick={() => toggleMonth(g.key)} onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); toggleMonth(g.key);} }}>
+              <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <svg className="chevron" viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                {g.label}
+              </span>
+              <span className="tx-amt">${g.total.toFixed(2)}</span>
+            </div>
+            {!isCollapsed && (
+              <ul className="tx-list" id={`month-${g.key}`}>
+                {g.items.map(t => (
+                  <li key={t.id} className="tx-row" onClick={() => onSelect(t)} style={{ cursor:'pointer' }}>
+                    <div>
+                      <div style={{ fontWeight:600 }}>{t.vendor || t.categoryId}</div>
+                      <div className="tx-meta">{new Date(t.date?.toDate?.() ?? t.date).toLocaleDateString()} • {t.categoryId}</div>
+                    </div>
+                    <div className="inline-actions">
+                      <div className="tx-amt">${t.amount.toFixed(2)}</div>
+                      <button className="icon-btn danger" aria-label="Delete transaction" onClick={(e) => { e.stopPropagation(); setPendingDel({ id: t.id!, label: t.vendor || t.categoryId }); }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" /></svg>
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+      {pendingDel && (
+        <div className="modal-backdrop">
+          <div className="modal fade-in" role="dialog" aria-modal="true">
+            <h3>Delete Transaction</h3>
+            <p style={{ fontSize: '.85rem', lineHeight:1.4 }}>Are you sure you want to delete <strong>{pendingDel.label}</strong>? This action cannot be undone.</p>
+            {delErr && <div className="alert-error" style={{ marginTop:8 }}>Delete failed: {delErr}</div>}
+            <div className="modal-footer">
+              <button className="btn btn-secondary" disabled={deleting} onClick={() => { if(!deleting){ setPendingDel(null); setDelErr(null);} }}>Cancel</button>
+              <button className="btn btn-danger" disabled={deleting} onClick={async () => {
+                if(!pendingDel) return; setDeleting(true); setDelErr(null);
+                try { await enableNetwork(db).catch(()=>{}); await deleteDoc(doc(db, 'users', uid, 'transactions', pendingDel.id)); onDeleted(pendingDel.id); setPendingDel(null); }
+                catch(e:any){ setDelErr(e?.code||e?.message||'error'); }
+                finally { setDeleting(false); disableNetwork(db).catch(()=>{}); }
+              }}>{deleting ? 'Deleting…':'Delete'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function MonthlyChart({ txs }: { txs: Tx[] }) {
+  const now = new Date();
+  const categories: CategoryId[] = ['food','coffee','groceries','others'];
+  const months: { key: string; year: number; month: number; label: string; labelShort: string; total: number; perCat: Record<CategoryId, number>; isCurrent: boolean }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    months.push({ key, year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleString(undefined,{month:'short', year:'2-digit'}), labelShort: d.toLocaleString(undefined,{month:'short'}).replace(/\.$/, ''), total:0, perCat:{food:0,coffee:0,groceries:0,others:0}, isCurrent: i===0 });
+  }
+  for (const t of txs) {
+    const d = new Date(t.date?.toDate?.() ?? t.date);
+    const slot = months.find(m => m.year === d.getFullYear() && m.month === d.getMonth());
+    if (slot) { const amt = t.amount||0; slot.total += amt; slot.perCat[t.categoryId as CategoryId] += amt; }
+  }
+  const past5 = months.slice(0,5);
+  const avg = past5.reduce((s,m)=> s+m.total,0)/(past5.length||1);
+  const maxVal = Math.max(avg, ...months.map(m=>m.total), 1);
+  return (
+    <div className="monthly-chart-wrap" aria-label="Spending last 6 months">
+      <div className="category-legend" aria-hidden={false}>
+        {categories.map(c => <div key={c} className="legend-item"><span className={`swatch cat-${c}`} />{c.charAt(0).toUpperCase()+c.slice(1)}</div>)}
+      </div>
+      <div className="monthly-chart" role="img" aria-hidden={false}>
+        {months.map(m => (
+          <div key={m.key} className={"monthly-chart-bar" + (m.isCurrent ? ' current':'')} aria-label={`${m.label} $${m.total.toFixed(2)}`} tabIndex={0} title={`${m.label}: $${m.total.toFixed(2)}`}> 
+            {m.total>0 && (
+              <div className="bar-outer" style={{ height:`${(m.total / maxVal)*100}%`, minHeight:4 }}>
+                {categories.map(cat => { const v=m.perCat[cat]; if(!v) return null; return <div key={cat} className={`seg cat-${cat}`} style={{ flex:v }} aria-hidden="true" />; })}
+              </div>
+            )}
+            <div className="bar-tooltip" role="tooltip">${m.total.toFixed(2)}</div>
+            <span>{m.labelShort}</span>
+          </div>
+        ))}
+        <div className="monthly-chart-avg" style={{ bottom: `${(avg / maxVal) * 100}%` }} aria-hidden="true" />
+        <div className="monthly-chart-avg-label" style={{ bottom: `${(avg / maxVal) * 100}%` }} aria-hidden="true">${avg.toFixed(2)}</div>
+      </div>
+    </div>
+  );
+}
+
+function InstallHint() {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [ready, setReady] = useState(false);
+  React.useEffect(() => {
+    const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); setReady(true); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+  if (!ready) return null;
+  return (
+    <div className="card" style={{ border:'1px dashed var(--color-border-strong)', background:'var(--color-surface-alt)' }}>
+      <b>Install FoodSpend?</b>
+      <p>Get faster access and offline support.</p>
+      <button className="btn" onClick={async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; setReady(false); }}>Install</button>
+    </div>
+  );
+}
+
+function SeedCleanup({ uid, txs, onDeleted }: { uid: string; txs: Tx[]; onDeleted: (id: string) => void }) {
+  // Hidden unless URL includes ?cleanup=1 to avoid exposing in production.
+  if (typeof window !== 'undefined' && !/[?&]cleanup=1/.test(window.location.search)) return null;
+  const seedTxs = useMemo(() => txs.filter(t => (t.note || '').toLowerCase() === 'seed'), [txs]);
+  const [removing, setRemoving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [doneCount, setDoneCount] = useState(0);
+  if (seedTxs.length === 0) return null;
+  return (
+    <div className="card" style={{ border: '1px dashed var(--color-border-strong)', background: 'var(--color-surface-alt)', marginTop: 12 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+        <div style={{ fontSize: '.7rem', letterSpacing: '.5px', textTransform: 'uppercase', fontWeight: 600, color: 'var(--color-text-dim)', display:'flex', flexDirection:'column', gap:4 }}>
+          <span>Cleanup: Remove seed data</span>
+          <span style={{ fontSize:10, fontWeight:400 }}>{seedTxs.length} seed transaction{seedTxs.length!==1?'s':''} detected</span>
+        </div>
+        <button className="btn btn-secondary" disabled={removing} onClick={async () => {
+          if (removing) return;
+          if (!confirm(`Delete ${seedTxs.length} seed transaction${seedTxs.length!==1?'s':''}? This cannot be undone.`)) return;
+          setRemoving(true); setErr(null); setDoneCount(0);
+          try {
+            await enableNetwork(db).catch(()=>{});
+            // Query fresh to ensure we catch any not in local state
+            const seedQ = query(collection(db, 'users', uid, 'transactions'), where('note','==','seed'));
+            const snap = await getDocs(seedQ as any);
+            let batch = writeBatch(db as any);
+            let ops = 0;
+            for (const d of snap.docs) {
+              batch.delete(d.ref);
+              ops++;
+              if (ops === 450) { await batch.commit(); setDoneCount(c=>c+ops); batch = writeBatch(db as any); ops = 0; }
+            }
+            if (ops) { await batch.commit(); setDoneCount(c=>c+ops); }
+            // Update UI
+            for (const t of seedTxs) onDeleted(t.id!);
+          } catch (e:any) {
+            setErr(e?.code||e?.message||'cleanup-failed');
+          } finally {
+            disableNetwork(db).catch(()=>{});
+            setRemoving(false);
+          }
+        }}>{removing ? 'Removing…' : 'Remove Seed Data'}</button>
+      </div>
+      {removing && <div style={{ marginTop:8, fontSize:12 }}>Deleting… {doneCount} removed</div>}
+      {err && <div className="alert-error" style={{ marginTop:8 }}>Error: {err}</div>}
+    </div>
+  );
+}
+
