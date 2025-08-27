@@ -88,7 +88,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: 16 }}>
+    <div className="app-container fade-in">
       <TopBar
         name={user.displayName ?? 'You'}
         onSignOut={() => signOut(auth)}
@@ -101,7 +101,7 @@ export default function App() {
       />
       {view === 'home' && (
         <>
-          {txErr && <div style={{ ...card, background: '#fef2f2', color: '#991b1b', marginTop: 12 }}>Load error: {txErr}</div>}
+          {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
           <TxList uid={user.uid} txs={txs} />
           <InstallHint />
         </>
@@ -199,7 +199,7 @@ function AuthScreen() {
     <div style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>
       <h1>FoodSpend</h1>
       <p>Track your food spend anywhere. Works offline.</p>
-      <button onClick={signIn} style={btn} disabled={loading}>{loading ? 'Opening…' : 'Sign in with Google'}</button>
+  <button onClick={signIn} className="btn" disabled={loading}>{loading ? 'Opening…' : 'Sign in with Google'}</button>
   {(attempts > 0 && (err || redirectErr)) && (
         <div style={{ marginTop: 12, color: '#b91c1c', fontSize: 12 }}>
           {(err || redirectErr)} – Ensure:
@@ -220,19 +220,17 @@ function TopBar({ name, onSignOut, onAdd, onRefresh, refreshing, showActions, on
   name: string; onSignOut: () => void; onAdd: () => void; onRefresh: () => void; refreshing: boolean; showActions: boolean; onHome: () => void; view: 'home' | 'add';
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {view === 'add' && <button style={btnSecondary} onClick={onHome}>← Home</button>}
-        <h2 style={{ margin: 0 }}>🍲 FoodSpend</h2>
+    <div className="topbar">
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        {view === 'add' && <button className="btn btn-secondary" onClick={onHome}>← Home</button>}
+        <h2>🍲 FoodSpend</h2>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {showActions && (
-          <>
-            <button title="Refresh" onClick={onRefresh} style={btnSecondary} disabled={refreshing}>{refreshing ? '…' : '↻'}</button>
-            <button title="Add" onClick={onAdd} style={btn}>＋</button>
-          </>
-        )}
-        <button onClick={onSignOut} style={btnSecondary}>Sign out</button>
+      <div className="topbar-actions">
+        {showActions && (<>
+          <button className="btn btn-secondary" title="Refresh" onClick={onRefresh} disabled={refreshing}>{refreshing ? '…' : '↻'}</button>
+          <button className="btn" title="Add" onClick={onAdd}>＋</button>
+        </>)}
+        <button className="btn btn-secondary" onClick={onSignOut}>{name.split(' ')[0]} ▾</button>
       </div>
     </div>
   );
@@ -286,9 +284,9 @@ function AddTxForm({ uid, onAdded, onCancel }: { uid: string; onAdded: (tx: Tx) 
   };
 
   return (
-    <form onSubmit={onSubmit} style={card}>
-      <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>Add Transaction <button type="button" onClick={onCancel} style={btnSecondary}>Cancel</button></h3>
-      <div style={grid2}>
+    <form onSubmit={onSubmit} className="card fade-in" style={{ animationDelay:'.05s' }}>
+      <h3 style={{ marginTop:0, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'1.05rem' }}>Add Transaction <button type="button" onClick={onCancel} className="btn btn-secondary">Cancel</button></h3>
+      <div className="grid2">
         <label>
           Amount (SGD)
           <input type="number" step="0.01" min={0.01} max={99999} value={amount} onChange={(e) => setAmount(e.target.value)} required />
@@ -298,7 +296,7 @@ function AddTxForm({ uid, onAdded, onCancel }: { uid: string; onAdded: (tx: Tx) 
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </label>
       </div>
-      <div style={grid2}>
+  <div className="grid2">
         <label>
           Category
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value as CategoryId)}>
@@ -325,37 +323,48 @@ function AddTxForm({ uid, onAdded, onCancel }: { uid: string; onAdded: (tx: Tx) 
         Note
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional" />
       </label>
-  <button disabled={!valid || saving} style={btn}>{saving ? 'Saving…' : 'Save'}</button>
-  {saveErr && <div style={{ marginTop: 8, fontSize: 12, color: '#b91c1c' }}>Error: {saveErr}</div>}
+  <div style={{ display:'flex', gap:12 }}>
+    <button disabled={!valid || saving} className="btn">{saving ? 'Saving…' : 'Save'}</button>
+    <button type="button" className="btn btn-secondary" onClick={onCancel}>Close</button>
+  </div>
+  {saveErr && <div className="alert-error" style={{ marginTop:10 }}>Error: {saveErr}</div>}
     </form>
   );
 }
 
 function TxList({ uid, txs }: { uid: string; txs: Tx[] }) {
+  const [pendingDel, setPendingDel] = useState<null | { id: string; label: string }>(null);
   const total = txs.reduce((s, t) => s + (t.amount || 0), 0);
   return (
-    <div style={card}>
-      <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span>Recent ({txs.length}) — Total ${total.toFixed(2)}</span>
-      </h3>
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {txs.map((t) => (
-          <li key={t.id} style={row}>
+    <div className="card fade-in" style={{ animationDelay:'.02s' }}>
+      <div className="tx-header"><span>Recent <span className="badge">{txs.length}</span> — Total ${total.toFixed(2)}</span></div>
+      {txs.length === 0 && <div className="tx-empty">No transactions yet. Use ＋ to add your first.</div>}
+      <ul className="tx-list">
+        {txs.map(t => (
+          <li key={t.id} className="tx-row">
             <div>
-              <strong>{t.vendor || t.categoryId}</strong>
-              <div style={{ opacity: 0.7, fontSize: 12 }}>
-                {new Date(t.date?.toDate?.() ?? t.date).toLocaleDateString()}
-              </div>
+              <div style={{ fontWeight:600 }}>{t.vendor || t.categoryId}</div>
+              <div className="tx-meta">{new Date(t.date?.toDate?.() ?? t.date).toLocaleDateString()} • {t.categoryId}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>${t.amount.toFixed(2)}</span>
-              {t.id && (
-                <button style={btnDanger} onClick={() => deleteDoc(doc(db, 'users', uid, 'transactions', t.id!))}>✕</button>
-              )}
+            <div className="inline-actions">
+              <div className="tx-amt">${t.amount.toFixed(2)}</div>
+              {t.id && <button className="btn btn-danger" style={{ padding:'0.55rem .75rem' }} onClick={() => setPendingDel({ id: t.id!, label: t.vendor || t.categoryId })}>✕</button>}
             </div>
           </li>
         ))}
       </ul>
+      {pendingDel && (
+        <div className="modal-backdrop">
+          <div className="modal fade-in" role="dialog" aria-modal="true">
+            <h3>Delete Transaction</h3>
+            <p style={{ fontSize: '.85rem', lineHeight:1.4 }}>Are you sure you want to delete <strong>{pendingDel.label}</strong>? This action cannot be undone.</p>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setPendingDel(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={async () => { await deleteDoc(doc(db, 'users', uid, 'transactions', pendingDel.id)); setPendingDel(null); }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -376,10 +385,10 @@ function InstallHint() {
 
   if (!ready) return null;
   return (
-    <div style={{ ...card, border: '1px dashed #999' }}>
+  <div className="card" style={{ border:'1px dashed var(--color-border-strong)', background:'var(--color-surface-alt)' }}>
       <b>Install FoodSpend?</b>
       <p>Get faster access and offline support.</p>
-      <button style={btn} onClick={async () => {
+  <button className="btn" onClick={async () => {
         deferredPrompt.prompt();
         await deferredPrompt.userChoice; setReady(false);
       }}>Install</button>
@@ -387,9 +396,4 @@ function InstallHint() {
   );
 }
 
-const card: React.CSSProperties = { padding: 16, borderRadius: 12, background: '#fff', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', marginBottom: 16 };
-const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #eee' };
-const grid2: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 };
-const btn: React.CSSProperties = { padding: '10px 16px', borderRadius: 10, border: 'none', background: '#0ea5e9', color: 'white', cursor: 'pointer' };
-const btnSecondary: React.CSSProperties = { ...btn, background: '#e5e7eb', color: '#111827' };
-const btnDanger: React.CSSProperties = { ...btn, background: '#ef4444' };
+// Legacy inline style constants removed in favor of CSS classes.
