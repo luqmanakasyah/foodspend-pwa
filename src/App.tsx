@@ -39,11 +39,37 @@ export default function App() {
 }
 
 function AuthScreen() {
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const signIn = async () => {
+    setErr(null);
+    setLoading(true);
+    try {
+      await signInWithPopup(auth, providers.google);
+    } catch (e: any) {
+      // Common silent failures: popup blocked, disallowed domain, provider disabled.
+      const code = e?.code || e?.message;
+      setErr(code || 'Sign-in failed');
+      // Fallback to redirect if popup blocked or unsupported
+      if (code && /popup|blocked|cancelled|closed/i.test(code)) {
+        import('firebase/auth').then(m => m.signInWithRedirect(auth, providers.google));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>
       <h1>FoodSpend</h1>
       <p>Track your food spend anywhere. Works offline.</p>
-      <button onClick={() => signInWithPopup(auth, providers.google)} style={btn}>Sign in with Google</button>
+      <button onClick={signIn} style={btn} disabled={loading}>{loading ? 'Opening…' : 'Sign in with Google'}</button>
+      {err && (
+        <div style={{ marginTop: 12, color: '#b91c1c', fontSize: 12 }}>
+          {err} – Check popup blocker & that Google provider is enabled.
+        </div>
+      )}
     </div>
   );
 }
