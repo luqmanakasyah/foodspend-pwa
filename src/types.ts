@@ -1,7 +1,9 @@
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
-export type CategoryId = 'food' | 'coffee' | 'groceries' | 'others';
-export type PaymentMethod = 'card' | 'cash' | 'ewallet';
+// Venue-oriented categories
+export type CategoryId = 'coffeeshop' | 'hawker' | 'food_centre' | 'cafe' | 'restaurant' | 'buffet' | 'others';
+// Updated payment methods: replaced legacy 'ewallet' with 'qr' (QR Payment)
+export type PaymentMethod = 'card' | 'qr' | 'cash';
 
 export type Tx = {
   id?: string;

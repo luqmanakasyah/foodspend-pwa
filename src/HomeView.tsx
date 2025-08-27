@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import type { Tx, CategoryId, PaymentMethod } from './types';
+import type { Tx, CategoryId } from './types';
 import { db, enableNetwork, disableNetwork, deleteDoc, doc, addDoc, serverTimestamp, Timestamp, collection, where, query, getDocs, writeBatch } from './lib/firebase';
 
 interface Props { uid: string; txs: Tx[]; onDeleted: (id: string) => void; onSelect: (tx: Tx) => void; }
@@ -105,17 +105,24 @@ function TxList({ uid, txs, onDeleted, onSelect }: { uid: string; txs: Tx[]; onD
 
 function MonthlyChart({ txs }: { txs: Tx[] }) {
   const now = new Date();
-  const categories: CategoryId[] = ['food','coffee','groceries','others'];
+  const categories: CategoryId[] = ['coffeeshop','hawker','food_centre','cafe','restaurant','buffet','others'];
+  const legacyCategoryMap: Record<string, CategoryId> = { food: 'hawker', coffee: 'cafe', groceries: 'others' };
   const months: { key: string; year: number; month: number; label: string; labelShort: string; total: number; perCat: Record<CategoryId, number>; isCurrent: boolean }[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${d.getMonth()}`;
-    months.push({ key, year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleString(undefined,{month:'short', year:'2-digit'}), labelShort: d.toLocaleString(undefined,{month:'short'}).replace(/\.$/, ''), total:0, perCat:{food:0,coffee:0,groceries:0,others:0}, isCurrent: i===0 });
+  months.push({ key, year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleString(undefined,{month:'short', year:'2-digit'}), labelShort: d.toLocaleString(undefined,{month:'short'}).replace(/\.$/, ''), total:0, perCat:{coffeeshop:0,hawker:0,food_centre:0,cafe:0,restaurant:0,buffet:0,others:0} as Record<CategoryId, number>, isCurrent: i===0 });
   }
   for (const t of txs) {
     const d = new Date(t.date?.toDate?.() ?? t.date);
     const slot = months.find(m => m.year === d.getFullYear() && m.month === d.getMonth());
-    if (slot) { const amt = t.amount||0; slot.total += amt; slot.perCat[t.categoryId as CategoryId] += amt; }
+    if (slot) {
+      const amt = t.amount||0; slot.total += amt;
+      let cat: any = (t as any).categoryId;
+      cat = legacyCategoryMap[cat] || cat;
+      if (!categories.includes(cat)) cat = 'others';
+  slot.perCat[cat as CategoryId] += amt;
+    }
   }
   const past5 = months.slice(0,5);
   const avg = past5.reduce((s,m)=> s+m.total,0)/(past5.length||1);
@@ -123,7 +130,10 @@ function MonthlyChart({ txs }: { txs: Tx[] }) {
   return (
     <div className="monthly-chart-wrap" aria-label="Spending last 6 months">
       <div className="category-legend" aria-hidden={false}>
-        {categories.map(c => <div key={c} className="legend-item"><span className={`swatch cat-${c}`} />{c.charAt(0).toUpperCase()+c.slice(1)}</div>)}
+        {categories.map(c => {
+          const label = c === 'food_centre' ? 'Food Centre' : c.charAt(0).toUpperCase()+c.slice(1);
+          return <div key={c} className="legend-item"><span className={`swatch cat-${c}`} />{label}</div>;
+        })}
       </div>
       <div className="monthly-chart" role="img" aria-hidden={false}>
         {months.map(m => (

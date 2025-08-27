@@ -111,6 +111,7 @@ export default function App() {
             onSelect={(tx) => { setEditingTx(tx); setView('edit'); }}
           />
           {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
+          <DataResetCard uid={user.uid} onCleared={() => setTxs([])} />
         </Suspense>
       )}
       {view === 'add' && (
@@ -133,5 +134,48 @@ export default function App() {
 }
 
 // Inline subcomponents moved to /components for modularity.
+
+function DataResetCard({ uid, onCleared }: { uid: string; onCleared: () => void }) {
+  if (typeof window === 'undefined' || !/[?&]reset=1/.test(window.location.search)) return null;
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+  const [deleted, setDeleted] = React.useState(0);
+  return (
+    <div className="card" style={{ marginTop:16, border:'1px dashed var(--color-border-strong)', background:'var(--color-surface-alt)' }}>
+      <h3 style={{ marginTop:0, fontSize:'0.9rem', display:'flex', alignItems:'center', justifyContent:'space-between' }}>Danger Zone <span style={{ fontSize:'.6rem', fontWeight:600, letterSpacing:'.5px', textTransform:'uppercase', color:'var(--color-text-dim)' }}>Reset Data</span></h3>
+      <p style={{ fontSize:'.75rem', lineHeight:1.4, margin:'8px 0 12px' }}>Delete ALL your transactions permanently. This cannot be undone. Use only to start fresh.</p>
+      {err && <div className="alert-error" style={{ marginBottom:12 }}>Error: {err}</div>}
+      {deleted > 0 && !busy && <div className="badge" style={{ marginBottom:12 }}>{deleted} deleted</div>}
+      <button className="btn btn-danger" disabled={busy} onClick={async () => {
+        if (busy) return;
+        if (!confirm('Delete ALL transactions for this account? This CANNOT be undone.')) return;
+        setBusy(true); setErr(null); setDeleted(0);
+        try {
+          await enableNetwork(db).catch(()=>{});
+          let totalDeleted = 0;
+          while (true) {
+            const snap = await getDocs(query(collection(db, 'users', uid, 'transactions')));
+            if (snap.empty) break;
+            const { writeBatch } = await import('./lib/firebase');
+            let batch = writeBatch(db as any);
+            let ops = 0;
+            for (const d of snap.docs) {
+              batch.delete(d.ref);
+              ops++;
+              if (ops === 450) { await batch.commit(); totalDeleted += ops; setDeleted(totalDeleted); batch = writeBatch(db as any); ops = 0; }
+            }
+            if (ops) { await batch.commit(); totalDeleted += ops; setDeleted(totalDeleted); }
+            if (snap.size < 450) break;
+          }
+          onCleared();
+        } catch (e:any) {
+          setErr(e?.code||e?.message||'reset-failed');
+        } finally {
+          setBusy(false); disableNetwork(db).catch(()=>{});
+        }
+      }}>{busy ? 'Deleting…' : 'Delete All Transactions'}</button>
+    </div>
+  );
+}
 
 // Legacy inline style constants removed in favor of CSS classes.

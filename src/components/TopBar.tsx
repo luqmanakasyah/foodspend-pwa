@@ -15,7 +15,6 @@ export function TopBar({ name, onSignOut, onAdd, onRefresh, refreshing, showActi
   return (
     <div className="topbar">
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-        {view === 'add' && <button className="btn btn-secondary" onClick={onHome}>← Home</button>}
         <h2>SpendTrackX</h2>
       </div>
       <div className="topbar-actions">
@@ -39,6 +38,14 @@ export function TopBar({ name, onSignOut, onAdd, onRefresh, refreshing, showActi
           </button>
           <button className="btn plus-btn" title="Add" aria-label="Add" onClick={onAdd}><span className="plus-glyph" aria-hidden="true">＋</span></button>
         </>)}
+        {view !== 'home' && (
+          <button className="icon-btn" aria-label="Home" title="Home" onClick={onHome}>
+            <svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12l9-9 9 9" />
+              <path d="M9 21V9h6v12" />
+            </svg>
+          </button>
+        )}
         <button className="icon-btn" aria-label="Logout" title="Logout" onClick={onSignOut}>
           <svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
