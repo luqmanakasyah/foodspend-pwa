@@ -117,7 +117,6 @@ function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [redirectErr, setRedirectErr] = useState<string | null>(null);
-  const [debugOpen, setDebugOpen] = useState(false);
   const [attempts, setAttempts] = useState(0);
 
   const signIn = async () => {
@@ -212,21 +211,7 @@ function AuthScreen() {
           </ul>
         </div>
       )}
-      <div style={{ marginTop: 16 }}>
-        <button style={btnSecondary} type="button" onClick={() => setDebugOpen(o => !o)}>Debug {debugOpen ? '▲' : '▼'}</button>
-        {debugOpen && (
-          <pre style={{ textAlign: 'left', fontSize: 11, background: '#f1f5f9', padding: 8, borderRadius: 8, maxHeight: 200, overflow: 'auto' }}>
-            {JSON.stringify({
-              ua: navigator.userAgent,
-              cookieEnabled: navigator.cookieEnabled,
-              standalone: window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone || false,
-              time: new Date().toISOString(),
-              attempts,
-              authAttemptTs: sessionStorage.getItem('fs_auth_attempt') || null
-            }, null, 2)}
-          </pre>
-        )}
-      </div>
+  {/* Debug UI removed for production */}
     </div>
   );
 }
