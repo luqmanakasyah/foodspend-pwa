@@ -46,8 +46,9 @@ export default function App() {
       setLoadingTxs(true);
       try {
         await enableNetwork(db).catch(()=>{});
-        const snap = await getDocs(query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc')));
-        if (!cancelled) { setTxs(snap.docs.map(d=>d.data() as Tx)); setTxErr(null); }
+  const snap = await getDocs(query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc')));
+  const list: Tx[] = snap.docs.map(d => ({ ...(d.data() as Omit<Tx,'id'>), id: d.id }));
+  if (!cancelled) { setTxs(list); setTxErr(null); }
       } catch (e: any) {
         if (!cancelled) { console.error('[fs] initial load error', e); setTxErr(e?.code||e?.message||'load-error'); }
       } finally {
@@ -64,8 +65,8 @@ export default function App() {
     try {
       setLoadingTxs(true);
       await enableNetwork(db).catch(()=>{});
-      const snap = await getDocs(query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc')));
-      const list = snap.docs.map(d=>d.data() as Tx);
+  const snap = await getDocs(query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc')));
+  const list: Tx[] = snap.docs.map(d => ({ ...(d.data() as Omit<Tx,'id'>), id: d.id }));
       setTxs(list);
       setTxErr(null);
     } catch (e: any) {
