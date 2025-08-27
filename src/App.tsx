@@ -13,7 +13,8 @@ export default function App() {
   const [redirectErr, setRedirectErr] = useState<string | null>(null);
   const [txErr, setTxErr] = useState<string | null>(null);
   const [loadingTxs, setLoadingTxs] = useState(false);
-  const [view, setView] = useState<'home' | 'add'>('home');
+  const [view, setView] = useState<'home' | 'add' | 'edit'>('home');
+  const [editingTx, setEditingTx] = useState<Tx | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -97,18 +98,35 @@ export default function App() {
         onRefresh={manualRefresh}
         refreshing={loadingTxs}
         showActions={view === 'home'}
-        onHome={() => setView('home')}
+  onHome={() => { setView('home'); setEditingTx(null); }}
         view={view}
       />
       {view === 'home' && (
         <>
           {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
-          <TxList uid={user.uid} txs={txs} />
+          <TxList
+            uid={user.uid}
+            txs={txs}
+            onDeleted={(id) => setTxs(prev => prev.filter(t => t.id !== id))}
+            onSelect={(tx) => { setEditingTx(tx); setView('edit'); }}
+          />
           <InstallHint />
         </>
       )}
       {view === 'add' && (
         <AddTxForm uid={user.uid} onAdded={handleAdded} onCancel={() => setView('home')} />
+      )}
+      {view === 'edit' && editingTx && (
+        <EditTxForm
+          uid={user.uid}
+          tx={editingTx}
+          onCancel={() => { setEditingTx(null); setView('home'); }}
+          onSaved={(updated) => {
+            setTxs(prev => prev.map(t => t.id === updated.id ? updated : t));
+            setEditingTx(null);
+            setView('home');
+          }}
+        />
       )}
     </div>
   );
@@ -218,20 +236,42 @@ function AuthScreen() {
 }
 
 function TopBar({ name, onSignOut, onAdd, onRefresh, refreshing, showActions, onHome, view }:{
-  name: string; onSignOut: () => void; onAdd: () => void; onRefresh: () => void; refreshing: boolean; showActions: boolean; onHome: () => void; view: 'home' | 'add';
+  name: string; onSignOut: () => void; onAdd: () => void; onRefresh: () => void; refreshing: boolean; showActions: boolean; onHome: () => void; view: 'home' | 'add' | 'edit';
 }) {
   return (
     <div className="topbar">
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
         {view === 'add' && <button className="btn btn-secondary" onClick={onHome}>← Home</button>}
-        <h2>🍲 FoodSpend</h2>
+        <h2>SpendTrackX</h2>
       </div>
       <div className="topbar-actions">
         {showActions && (<>
-          <button className="btn btn-secondary" title="Refresh" onClick={onRefresh} disabled={refreshing}>{refreshing ? '…' : '↻'}</button>
-          <button className="btn" title="Add" onClick={onAdd}>＋</button>
+          <button className="icon-btn" aria-label="Refresh" title="Refresh" onClick={onRefresh} disabled={refreshing}>
+            {refreshing ? (
+              <svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="spin">
+                <path d="M21 2v6h-6" />
+                <path d="M3 22v-6h6" />
+                <path d="M3 6a9 9 0 0 1 15-3l3 3" opacity="0.35" />
+                <path d="M21 18a9 9 0 0 1-15 3l-3-3" opacity="0.35" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2v6h-6" />
+                <path d="M3 22v-6h6" />
+                <path d="M3 6a9 9 0 0 1 15-3l3 3" />
+                <path d="M21 18a9 9 0 0 1-15 3l-3-3" />
+              </svg>
+            )}
+          </button>
+          <button className="btn plus-btn" title="Add" aria-label="Add" onClick={onAdd}><span className="plus-glyph" aria-hidden="true">＋</span></button>
         </>)}
-        <button className="btn btn-secondary" onClick={onSignOut}>{name.split(' ')[0]} ▾</button>
+        <button className="icon-btn" aria-label="Logout" title="Logout" onClick={onSignOut}>
+          <svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+            <path d="M10 17l5-5-5-5" />
+            <path d="M15 12H3" />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -333,23 +373,46 @@ function AddTxForm({ uid, onAdded, onCancel }: { uid: string; onAdded: (tx: Tx) 
   );
 }
 
-function TxList({ uid, txs }: { uid: string; txs: Tx[] }) {
+function TxList({ uid, txs, onDeleted, onSelect }: { uid: string; txs: Tx[]; onDeleted?: (id: string) => void; onSelect?: (tx: Tx) => void }) {
   const [pendingDel, setPendingDel] = useState<null | { id: string; label: string }>(null);
-  const total = txs.reduce((s, t) => s + (t.amount || 0), 0);
+  const [deleting, setDeleting] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
+  // Monthly summary (current month)
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  const monthlyTotal = txs.reduce((sum, t) => {
+    const d = new Date(t.date?.toDate?.() ?? t.date);
+    return (d.getMonth() === month && d.getFullYear() === year) ? sum + (t.amount || 0) : sum;
+  }, 0);
+  const monthLabel = now.toLocaleString(undefined, { month: 'short', year: 'numeric' });
   return (
     <div className="card fade-in" style={{ animationDelay:'.02s' }}>
-      <div className="tx-header"><span>Recent <span className="badge">{txs.length}</span> — Total ${total.toFixed(2)}</span></div>
+      <div className="tx-header">
+        <span>{monthLabel}</span>
+        <span className="tx-amt">${monthlyTotal.toFixed(2)}</span>
+      </div>
       {txs.length === 0 && <div className="tx-empty">No transactions yet. Use ＋ to add your first.</div>}
       <ul className="tx-list">
         {txs.map(t => (
-          <li key={t.id} className="tx-row">
+          <li key={t.id} className="tx-row" onClick={() => onSelect?.(t)} style={{ cursor:'pointer' }}>
             <div>
               <div style={{ fontWeight:600 }}>{t.vendor || t.categoryId}</div>
               <div className="tx-meta">{new Date(t.date?.toDate?.() ?? t.date).toLocaleDateString()} • {t.categoryId}</div>
             </div>
             <div className="inline-actions">
               <div className="tx-amt">${t.amount.toFixed(2)}</div>
-              {t.id && <button className="btn btn-danger" style={{ padding:'0.55rem .75rem' }} onClick={() => setPendingDel({ id: t.id!, label: t.vendor || t.categoryId })}>✕</button>}
+              {t.id && (
+                <button className="icon-btn danger" aria-label="Delete transaction" onClick={(e) => { e.stopPropagation(); setPendingDel({ id: t.id!, label: t.vendor || t.categoryId }); }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
+                  </svg>
+                </button>
+              )}
             </div>
           </li>
         ))}
@@ -359,14 +422,108 @@ function TxList({ uid, txs }: { uid: string; txs: Tx[] }) {
           <div className="modal fade-in" role="dialog" aria-modal="true">
             <h3>Delete Transaction</h3>
             <p style={{ fontSize: '.85rem', lineHeight:1.4 }}>Are you sure you want to delete <strong>{pendingDel.label}</strong>? This action cannot be undone.</p>
+            {delErr && <div className="alert-error" style={{ marginTop:8 }}>Delete failed: {delErr}</div>}
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setPendingDel(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={async () => { await deleteDoc(doc(db, 'users', uid, 'transactions', pendingDel.id)); setPendingDel(null); }}>Delete</button>
+              <button className="btn btn-secondary" disabled={deleting} onClick={() => { if (!deleting) { setPendingDel(null); setDelErr(null);} }}>Cancel</button>
+              <button className="btn btn-danger" disabled={deleting} onClick={async () => {
+                if (!pendingDel) return;
+                setDeleting(true);
+                setDelErr(null);
+                try {
+                  await enableNetwork(db).catch(()=>{});
+                  await deleteDoc(doc(db, 'users', uid, 'transactions', pendingDel.id));
+                  onDeleted?.(pendingDel.id);
+                  setPendingDel(null);
+                } catch (e: any) {
+                  setDelErr(e?.code || e?.message || 'error');
+                } finally {
+                  setDeleting(false);
+                  disableNetwork(db).catch(()=>{});
+                }
+              }}>{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function EditTxForm({ uid, tx, onCancel, onSaved }: { uid: string; tx: Tx; onCancel: () => void; onSaved: (tx: Tx) => void }) {
+  const [amount, setAmount] = useState(String(tx.amount));
+  const [date, setDate] = useState(() => new Date(tx.date?.toDate?.() ?? tx.date).toISOString().slice(0,10));
+  const [categoryId, setCategoryId] = useState<CategoryId>(tx.categoryId);
+  const [vendor, setVendor] = useState(tx.vendor || '');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(tx.paymentMethod || 'card');
+  const [note, setNote] = useState(tx.note || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const valid = useMemo(() => Number(amount) > 0 && Number(amount) < 100000 && !!date, [amount, date]);
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valid) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      await enableNetwork(db).catch(()=>{});
+      const ref = doc(db, 'users', uid, 'transactions', tx.id!);
+      const updated: Partial<Tx> = {
+        amount: Number(amount),
+        date: Timestamp.fromDate(new Date(date)),
+        categoryId, vendor, paymentMethod, note,
+        updatedAt: serverTimestamp(),
+      };
+      // updateDoc imported via firebase lib update earlier
+      const { updateDoc } = await import('./lib/firebase');
+      await updateDoc(ref as any, updated as any);
+      onSaved({ ...tx, ...updated, updatedAt: Timestamp.fromDate(new Date()) } as Tx);
+    } catch (e: any) {
+      setErr(e?.code || e?.message || 'Update failed');
+    } finally {
+      setSaving(false);
+      disableNetwork(db).catch(()=>{});
+    }
+  };
+  return (
+    <form onSubmit={onSubmit} className="card fade-in" style={{ animationDelay:'.05s' }}>
+      <h3 style={{ marginTop:0, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'1.05rem' }}>Edit Transaction <button type="button" onClick={onCancel} className="btn btn-secondary">Cancel</button></h3>
+      <div className="grid2">
+        <label>Amount (SGD)
+          <input type="number" step="0.01" min={0.01} max={99999} value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        </label>
+        <label>Date
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </label>
+      </div>
+      <div className="grid2">
+        <label>Category
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value as CategoryId)}>
+            <option value="food">Food</option>
+            <option value="coffee">Coffee</option>
+            <option value="groceries">Groceries</option>
+            <option value="others">Others</option>
+          </select>
+        </label>
+        <label>Payment
+          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
+            <option value="card">Card</option>
+            <option value="cash">Cash</option>
+            <option value="ewallet">eWallet</option>
+          </select>
+        </label>
+      </div>
+      <label>Vendor
+        <input value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="e.g., Toast Box" />
+      </label>
+      <label>Note
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional" />
+      </label>
+      <div style={{ display:'flex', gap:12 }}>
+        <button disabled={!valid || saving} className="btn">{saving ? 'Saving…' : 'Save'}</button>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>Close</button>
+      </div>
+      {err && <div className="alert-error" style={{ marginTop:10 }}>Error: {err}</div>}
+    </form>
   );
 }
 
