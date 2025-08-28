@@ -1,4 +1,4 @@
-# FoodSpend PWA
+# SpendTrackX PWA
 
 Minimal PWA to track food spending using React + Vite + TypeScript + Firebase (Auth + Firestore with offline persistence).
 

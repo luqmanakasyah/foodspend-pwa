@@ -48,8 +48,8 @@ export function AuthScreen() {
 
   return (
     <div style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>
-      <h1>FoodSpend</h1>
-      <p>Track your food spend anywhere. Works offline.</p>
+  <h1>SpendTrackX</h1>
+  <p>Track food spending anywhere. Works offline.</p>
       <button onClick={signIn} className="btn" disabled={loading}>{loading ? 'Opening…' : 'Sign in with Google'}</button>
       {(attempts > 0 && (err || redirectErr)) && (
         <div style={{ marginTop: 12, color: '#b91c1c', fontSize: 12 }}>

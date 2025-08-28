@@ -186,7 +186,7 @@ function InstallHint() {
   if (!ready) return null;
   return (
     <div className="card" style={{ border:'1px dashed var(--color-border-strong)', background:'var(--color-surface-alt)' }}>
-      <b>Install FoodSpend?</b>
+  <b>Install SpendTrackX?</b>
       <p>Get faster access and offline support.</p>
       <button className="btn" onClick={async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; setReady(false); }}>Install</button>
     </div>
