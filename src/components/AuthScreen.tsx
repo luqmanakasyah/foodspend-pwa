@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { auth, getRedirectResult } from '../lib/firebase';
+import { getAuthModule } from '../lib/firebase-lite';
 
 export function AuthScreen() {
   const [loading, setLoading] = useState(false);
@@ -22,16 +22,16 @@ export function AuthScreen() {
         catch { try { sessionStorage.setItem('__fs_test__','1'); sessionStorage.removeItem('__fs_test__'); return true; } catch { return false; } }
       })();
       console.info('[auth] storage capability', { canUseStorage });
-      const authMod = await import('firebase/auth');
-      const provider = new authMod.GoogleAuthProvider();
+  const authMod = await getAuthModule();
+  const provider = new authMod.GoogleAuthProvider();
       if (!provider || provider.providerId !== 'google.com') { setErr('Provider initialization failure'); return; }
       try {
-        await authMod.signInWithPopup(auth, provider);
+  await authMod.signInWithPopup(authMod.auth, provider);
         return;
       } catch (popupErr: any) {
         const pCode = popupErr?.code || popupErr?.message;
         if (!canUseStorage) { setErr('Popup blocked & no durable storage; enable cookies or open in external Safari/Chrome.'); return; }
-        await authMod.signInWithRedirect(auth, provider);
+  await authMod.signInWithRedirect(authMod.auth, provider);
         return;
       }
     } catch(e:any) {

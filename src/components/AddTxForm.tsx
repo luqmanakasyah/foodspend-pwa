@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { collection, addDoc, serverTimestamp, Timestamp, enableNetwork, disableNetwork, db } from '../lib/firebase';
+import { getFirestoreModule } from '../lib/firebase-lite';
 import type { Tx, CategoryId, PaymentMethod } from '../types';
 import { normalizeCategory, normalizePaymentMethod } from '../lib/normalize';
 import { useSettings } from '../lib/settings';
+import { displayLabel } from '../lib/normalize';
 
 interface Props { uid: string; onAdded: (tx: Tx) => void; onCancel: () => void; }
 
@@ -23,13 +24,12 @@ export function AddTxForm({ uid, onAdded, onCancel }: Props) {
     if (!valid) return;
     setSaving(true);
     try {
-      setSaveErr(null);
-      await enableNetwork(db).catch(()=>{});
+  setSaveErr(null);
+  const { db, collection, addDoc, serverTimestamp, Timestamp } = await (await getFirestoreModule());
   const tx: Tx = { amount: Number(amount), currency: 'SGD', date: Timestamp.fromDate(new Date(date)), categoryId: normalizeCategory(categoryId), vendor, paymentMethod: normalizePaymentMethod(paymentMethod), note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-      const ref = await addDoc(collection(db, 'users', uid, 'transactions'), tx);
+  const ref = await addDoc(collection(db, 'users', uid, 'transactions'), tx as any);
       setAmount(''); setVendor(''); setNote('');
       onAdded({ ...tx, id: ref.id, createdAt: Timestamp.fromDate(new Date()), updatedAt: Timestamp.fromDate(new Date()) });
-      disableNetwork(db).catch(()=>{});
     } catch(e:any) {
       setSaveErr(e?.code || e?.message || 'Save failed');
     } finally { setSaving(false); }
@@ -64,7 +64,7 @@ export function AddTxForm({ uid, onAdded, onCancel }: Props) {
             <label>Category</label>
             <div className="field-input">
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value as CategoryId)}>
-                {categories.map(c => <option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}
+                {categories.map(c => <option key={c} value={c}>{displayLabel(c)}</option>)}
               </select>
             </div>
           </div>
@@ -72,7 +72,7 @@ export function AddTxForm({ uid, onAdded, onCancel }: Props) {
             <label>Payment</label>
             <div className="field-input">
               <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
-                {paymentMethods.map(p => <option key={p} value={p}>{p.replace(/_/g,' ')}</option>)}
+                {paymentMethods.map(p => <option key={p} value={p}>{displayLabel(p)}</option>)}
               </select>
             </div>
           </div>

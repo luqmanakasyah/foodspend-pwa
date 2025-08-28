@@ -1,5 +1,6 @@
 import React, { useEffect, useState, Suspense } from 'react';
-import { auth, onAuthStateChanged, signOut, db, collection, addDoc, serverTimestamp, Timestamp, disableNetwork, enableNetwork, getDocs, query, orderBy, getRedirectResult } from './lib/firebase';
+// Lazy firebase accessors
+import { getAuthModule, getFirestoreModule } from './lib/firebase-lite';
 import type { Tx } from './types';
 import { TopBar } from './components/TopBar';
 import { AuthScreen } from './components/AuthScreen';
@@ -18,27 +19,26 @@ export default function App() {
   const [view, setView] = useState<'home' | 'add' | 'edit'>('home');
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chartDim, setChartDim] = useState<'category' | 'payment'>('category');
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u ? { uid: u.uid, displayName: u.displayName } : null);
-    });
-    return () => unsub();
+    let unsub: any;
+    (async () => {
+      const { auth, onAuthStateChanged } = await getAuthModule();
+      unsub = onAuthStateChanged(auth, (u) => setUser(u ? { uid: u.uid, displayName: u.displayName } : null));
+    })();
+    return () => { unsub && unsub(); };
   }, []);
 
   // Resolve redirect result early (iOS Safari occasionally delays persistence availability) and log details.
   useEffect(() => {
     (async () => {
       try {
+        const { auth, getRedirectResult } = await getAuthModule();
         const result = await getRedirectResult(auth);
         if (result?.user) console.info('[auth] redirect result user restored', result.user.uid);
-      } catch (e: any) {
-        const code = e?.code || e?.message;
-        console.warn('[auth] getRedirectResult error', code, e);
-        // Ignore benign argument-error seen on iOS Safari when no pending redirect
-        if (code !== 'auth/argument-error') {
-          setRedirectErr(code);
-        }
+      } catch (e:any) {
+        const code = e?.code || e?.message; if (code !== 'auth/argument-error') setRedirectErr(code);
       }
     })();
   }, []);
@@ -46,21 +46,19 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    const loadOnce = async () => {
+    (async () => {
       setLoadingTxs(true);
       try {
-        await enableNetwork(db).catch(()=>{});
-  const snap = await getDocs(query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc')));
-  const list: Tx[] = snap.docs.map(d => ({ ...(d.data() as Omit<Tx,'id'>), id: d.id }));
-  if (!cancelled) { setTxs(list); setTxErr(null); }
-      } catch (e: any) {
-        if (!cancelled) { console.error('[fs] initial load error', e); setTxErr(e?.code||e?.message||'load-error'); }
-      } finally {
-        if (!cancelled) setLoadingTxs(false);
-        disableNetwork(db).catch(()=>{});
-      }
-    };
-    loadOnce();
+        const { db, getDocs, query, collection, orderBy } = await (await getFirestoreModule());
+        const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date','desc'));
+        const snap = await getDocs(q as any);
+        if (!cancelled) {
+          const list: Tx[] = snap.docs.map(d => ({ ...(d.data() as Omit<Tx,'id'>), id: d.id }));
+          setTxs(list); setTxErr(null);
+        }
+      } catch(e:any) { if(!cancelled) setTxErr(e?.code||e?.message||'load-error'); }
+      finally { if(!cancelled) setLoadingTxs(false); }
+    })();
     return () => { cancelled = true; };
   }, [user]);
 
@@ -69,18 +67,13 @@ export default function App() {
     if (!user) return;
     try {
       setLoadingTxs(true);
-      await enableNetwork(db).catch(()=>{});
-  const snap = await getDocs(query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc')));
-  const list: Tx[] = snap.docs.map(d => ({ ...(d.data() as Omit<Tx,'id'>), id: d.id }));
-      setTxs(list);
-      setTxErr(null);
-    } catch (e: any) {
-      setTxErr(e?.code || e?.message || 'load-error');
-    } finally {
-      setLoadingTxs(false);
-      // Return to offline (no network listeners)
-      disableNetwork(db).catch(()=>{});
-    }
+      const { db, getDocs, query, collection, orderBy } = await (await getFirestoreModule());
+      const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date','desc'));
+      const snap = await getDocs(q as any);
+      const list: Tx[] = snap.docs.map(d => ({ ...(d.data() as Omit<Tx,'id'>), id: d.id }));
+      setTxs(list); setTxErr(null);
+    } catch(e:any){ setTxErr(e?.code||e?.message||'load-error'); }
+    finally { setLoadingTxs(false); }
   };
 
   if (!user) return <AuthScreen />;
@@ -94,11 +87,11 @@ export default function App() {
   };
 
   return (
-    <SettingsProvider>
+  <SettingsProvider uid={user.uid}>
       <div className="app-container fade-in">
         <TopBar
           name={user.displayName ?? 'You'}
-          onSignOut={() => signOut(auth)}
+          onSignOut={async () => { const { auth, signOut } = await getAuthModule(); signOut(auth); }}
           onAdd={() => setView('add')}
           onRefresh={manualRefresh}
           refreshing={loadingTxs}
@@ -106,6 +99,8 @@ export default function App() {
           onHome={() => { setView('home'); setEditingTx(null); }}
           view={view}
           onOpenSettings={() => setSettingsOpen(true)}
+          chartDim={chartDim}
+          onToggleChartDim={() => setChartDim(d => d==='category' ? 'payment' : 'category')}
         />
         <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         {view === 'home' && (
@@ -115,6 +110,7 @@ export default function App() {
               txs={txs}
               onDeleted={(id) => setTxs(prev => prev.filter(t => t.id !== id))}
               onSelect={(tx) => { setEditingTx(tx); setView('edit'); }}
+              chartDim={chartDim}
             />
             {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
             <DataResetCard uid={user.uid} onCleared={() => setTxs([])} />
@@ -158,12 +154,11 @@ function DataResetCard({ uid, onCleared }: { uid: string; onCleared: () => void 
         if (!confirm('Delete ALL transactions for this account? This CANNOT be undone.')) return;
         setBusy(true); setErr(null); setDeleted(0);
         try {
-          await enableNetwork(db).catch(()=>{});
+          const { db, getDocs, query, collection, writeBatch } = await (await getFirestoreModule());
           let totalDeleted = 0;
           while (true) {
-            const snap = await getDocs(query(collection(db, 'users', uid, 'transactions')));
+            const snap = await getDocs(query(collection(db, 'users', uid, 'transactions')) as any);
             if (snap.empty) break;
-            const { writeBatch } = await import('./lib/firebase');
             let batch = writeBatch(db as any);
             let ops = 0;
             for (const d of snap.docs) {
@@ -175,11 +170,8 @@ function DataResetCard({ uid, onCleared }: { uid: string; onCleared: () => void 
             if (snap.size < 450) break;
           }
           onCleared();
-        } catch (e:any) {
-          setErr(e?.code||e?.message||'reset-failed');
-        } finally {
-          setBusy(false); disableNetwork(db).catch(()=>{});
-        }
+        } catch(e:any) { setErr(e?.code||e?.message||'reset-failed'); }
+        finally { setBusy(false); }
       }}>{busy ? 'Deleting…' : 'Delete All Transactions'}</button>
     </div>
   );

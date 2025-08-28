@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { enableNetwork, disableNetwork, db, doc, serverTimestamp, Timestamp } from '../lib/firebase';
+import { getFirestoreModule } from '../lib/firebase-lite';
 import type { Tx, CategoryId, PaymentMethod } from '../types';
 import { normalizeCategory, normalizePaymentMethod } from '../lib/normalize';
 import { useSettings } from '../lib/settings';
+import { displayLabel } from '../lib/normalize';
 
 interface Props { uid: string; tx: Tx; onCancel: () => void; onSaved: (tx: Tx) => void; }
 
@@ -28,15 +29,14 @@ export function EditTxForm({ uid, tx, onCancel, onSaved }: Props) {
     e.preventDefault();
     if (!valid) return;
     setSaving(true); setErr(null);
-    try {
-      await enableNetwork(db).catch(()=>{});
-      const ref = doc(db, 'users', uid, 'transactions', tx.id!);
+  try {
+  const { db, doc, serverTimestamp, Timestamp, updateDoc } = await (await getFirestoreModule());
+  const ref = doc(db, 'users', uid, 'transactions', tx.id!);
   const updated: Partial<Tx> = { amount: Number(amount), date: Timestamp.fromDate(new Date(date)), categoryId: normalizeCategory(categoryId), vendor, paymentMethod: normalizePaymentMethod(paymentMethod), note, updatedAt: serverTimestamp() };
-      const { updateDoc } = await import('../lib/firebase');
-      await updateDoc(ref as any, updated as any);
-      onSaved({ ...tx, ...updated, updatedAt: Timestamp.fromDate(new Date()) } as Tx);
+  await updateDoc(ref as any, updated as any);
+  onSaved({ ...tx, ...updated, updatedAt: Timestamp.fromDate(new Date()) } as Tx);
     } catch(e:any) { setErr(e?.code || e?.message || 'Update failed'); }
-    finally { setSaving(false); disableNetwork(db).catch(()=>{}); }
+  finally { setSaving(false); }
   };
 
   return (
@@ -68,7 +68,7 @@ export function EditTxForm({ uid, tx, onCancel, onSaved }: Props) {
             <label>Category</label>
             <div className="field-input">
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value as CategoryId)}>
-                {categories.map(c => <option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}
+                {categories.map(c => <option key={c} value={c}>{displayLabel(c)}</option>)}
               </select>
             </div>
           </div>
@@ -76,7 +76,7 @@ export function EditTxForm({ uid, tx, onCancel, onSaved }: Props) {
             <label>Payment</label>
             <div className="field-input">
               <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
-                {paymentMethods.map(p => <option key={p} value={p}>{p.replace(/_/g,' ')}</option>)}
+                {paymentMethods.map(p => <option key={p} value={p}>{displayLabel(p)}</option>)}
               </select>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Icon } from './components/Icon';
+import { displayLabel } from './lib/normalize';
 import type { Tx, CategoryId } from './types';
 import { getFirestoreModule } from './lib/firebase-lite';
 import { useSettings } from './lib/settings';
@@ -147,8 +148,7 @@ function MonthlyChart({ txs, dimension }: { txs: Tx[]; dimension: 'category' | '
   <div className="monthly-chart-wrap" aria-label="Spending last 6 months">
       <div className="category-legend" aria-hidden={false}>
         {keys.map(k => {
-          const friendly = k.replace(/_/g,' ');
-          const label = friendly.charAt(0).toUpperCase() + friendly.slice(1);
+          const label = displayLabel(k);
           const className = `swatch cat-${k}`;
           const needsInline = typeof document !== 'undefined' && !document.querySelector(`.seg.cat-${CSS.escape?.(k)}`) && !(dimension==='category' && /^(coffeeshop|hawker|food_centre|cafe|restaurant|buffet|others)$/.test(k));
           const style = needsInline ? { background: categoryGradient(k) } : undefined;

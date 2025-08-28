@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Icon } from './Icon';
 import { useSettings } from '../lib/settings';
+import { displayLabel } from '../lib/normalize';
 
 interface Props { open: boolean; onClose: () => void; }
 
@@ -73,7 +74,7 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
           <ul className="settings-list">
             {categories.map((c,i) => (
               <li key={c} className="settings-item">
-                <span className="settings-item-label">{c}</span>
+                <span className="settings-item-label">{displayLabel(c)}</span>
                 <div className="settings-item-actions">
                   <button className="icon-btn" aria-label="Move Up" disabled={i===0} onClick={()=> setCategories(move(categories,i,-1))}><Icon name="up" size={16} /></button>
                   <button className="icon-btn" aria-label="Move Down" disabled={i===categories.length-1} onClick={()=> setCategories(move(categories,i,1))}><Icon name="down" size={16} /></button>
@@ -92,7 +93,7 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
           <ul className="settings-list">
             {paymentMethods.map((m,i) => (
               <li key={m} className="settings-item">
-                <span className="settings-item-label">{m}</span>
+                <span className="settings-item-label">{displayLabel(m)}</span>
                 <div className="settings-item-actions">
                   <button className="icon-btn" aria-label="Move Up" disabled={i===0} onClick={()=> setPaymentMethods(move(paymentMethods,i,-1))}><Icon name="up" size={16} /></button>
                   <button className="icon-btn" aria-label="Move Down" disabled={i===paymentMethods.length-1} onClick={()=> setPaymentMethods(move(paymentMethods,i,1))}><Icon name="down" size={16} /></button>
