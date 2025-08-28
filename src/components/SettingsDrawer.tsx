@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Icon } from './Icon';
 import { useSettings } from '../lib/settings';
 
 interface Props { open: boolean; onClose: () => void; }
 
 export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
-  const { categories, paymentMethods, setCategories, setPaymentMethods, reset } = useSettings();
+  const { categories, paymentMethods, setCategories, setPaymentMethods, reset, theme, setTheme } = useSettings();
   const [catInput, setCatInput] = useState('');
   const [pmInput, setPmInput] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -47,9 +48,21 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
       <div className="settings-drawer-inner">
         <div className="settings-header">
           <h3 style={{ margin:0 }}>Settings</h3>
-          <button className="icon-btn" aria-label="Close" onClick={onClose}>
-            <svg viewBox="0 0 24 24" width={18} height={18} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
-          </button>
+          <button className="icon-btn" aria-label="Close" onClick={onClose}><Icon name="close" /></button>
+        </div>
+        <div className="settings-section">
+          <h4>Appearance</h4>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            {(['system','light','dark'] as const).map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setTheme(mode)}
+                className="btn btn-secondary"
+                style={theme===mode ? { boxShadow:'0 0 0 2px var(--color-accent) inset' }: {}}
+              >{mode.charAt(0).toUpperCase()+mode.slice(1)}</button>
+            ))}
+          </div>
         </div>
         <div className="settings-section">
           <h4>Categories</h4>
@@ -62,15 +75,9 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
               <li key={c} className="settings-item">
                 <span className="settings-item-label">{c}</span>
                 <div className="settings-item-actions">
-                  <button className="icon-btn" aria-label="Move Up" disabled={i===0} onClick={()=> setCategories(move(categories,i,-1))}>
-                    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M6 15l6-6 6 6" /></svg>
-                  </button>
-                  <button className="icon-btn" aria-label="Move Down" disabled={i===categories.length-1} onClick={()=> setCategories(move(categories,i,1))}>
-                    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-                  </button>
-                  <button className="icon-btn danger" aria-label="Delete" onClick={()=> removeCategory(i)}>
-                    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" /></svg>
-                  </button>
+                  <button className="icon-btn" aria-label="Move Up" disabled={i===0} onClick={()=> setCategories(move(categories,i,-1))}><Icon name="up" size={16} /></button>
+                  <button className="icon-btn" aria-label="Move Down" disabled={i===categories.length-1} onClick={()=> setCategories(move(categories,i,1))}><Icon name="down" size={16} /></button>
+                  <button className="icon-btn danger" aria-label="Delete" onClick={()=> removeCategory(i)}><Icon name="trash" size={16} /></button>
                 </div>
               </li>
             ))}
@@ -87,15 +94,9 @@ export const SettingsDrawer: React.FC<Props> = ({ open, onClose }) => {
               <li key={m} className="settings-item">
                 <span className="settings-item-label">{m}</span>
                 <div className="settings-item-actions">
-                  <button className="icon-btn" aria-label="Move Up" disabled={i===0} onClick={()=> setPaymentMethods(move(paymentMethods,i,-1))}>
-                    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M6 15l6-6 6 6" /></svg>
-                  </button>
-                  <button className="icon-btn" aria-label="Move Down" disabled={i===paymentMethods.length-1} onClick={()=> setPaymentMethods(move(paymentMethods,i,1))}>
-                    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-                  </button>
-                  <button className="icon-btn danger" aria-label="Delete" onClick={()=> removePayment(i)}>
-                    <svg viewBox="0 0 24 24" width={16} height={16} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" /></svg>
-                  </button>
+                  <button className="icon-btn" aria-label="Move Up" disabled={i===0} onClick={()=> setPaymentMethods(move(paymentMethods,i,-1))}><Icon name="up" size={16} /></button>
+                  <button className="icon-btn" aria-label="Move Down" disabled={i===paymentMethods.length-1} onClick={()=> setPaymentMethods(move(paymentMethods,i,1))}><Icon name="down" size={16} /></button>
+                  <button className="icon-btn danger" aria-label="Delete" onClick={()=> removePayment(i)}><Icon name="trash" size={16} /></button>
                 </div>
               </li>
             ))}

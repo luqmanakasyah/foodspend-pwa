@@ -1,15 +1,16 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Icon } from './components/Icon';
 import type { Tx, CategoryId } from './types';
-import { db, enableNetwork, disableNetwork, deleteDoc, doc, addDoc, serverTimestamp, Timestamp, collection, where, query, getDocs, writeBatch } from './lib/firebase';
+import { getFirestoreModule } from './lib/firebase-lite';
 import { useSettings } from './lib/settings';
 import { categoryGradient } from './lib/colors';
 
-interface Props { uid: string; txs: Tx[]; onDeleted: (id: string) => void; onSelect: (tx: Tx) => void; }
+interface Props { uid: string; txs: Tx[]; onDeleted: (id: string) => void; onSelect: (tx: Tx) => void; chartDim?: 'category' | 'payment'; }
 
-export default function HomeView({ uid, txs, onDeleted, onSelect }: Props) {
+export default function HomeView({ uid, txs, onDeleted, onSelect, chartDim = 'category' }: Props) {
   return (
     <>
-      <MonthlyChart txs={txs} />
+  <MonthlyChart txs={txs} dimension={chartDim} />
       <TxList uid={uid} txs={txs} onDeleted={onDeleted} onSelect={onSelect} />
   <SeedCleanup uid={uid} txs={txs} onDeleted={onDeleted} />
       <InstallHint />
@@ -72,9 +73,7 @@ function TxList({ uid, txs, onDeleted, onSelect }: { uid: string; txs: Tx[]; onD
                     </div>
                     <div className="inline-actions">
                       <div className="tx-amt">${t.amount.toFixed(2)}</div>
-                      <button className="icon-btn danger" aria-label="Delete transaction" onClick={(e) => { e.stopPropagation(); setPendingDel({ id: t.id!, label: t.vendor || t.categoryId }); }}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" /></svg>
-                      </button>
+                      <button className="icon-btn danger" aria-label="Delete transaction" onClick={(e) => { e.stopPropagation(); setPendingDel({ id: t.id!, label: t.vendor || t.categoryId }); }}><Icon name="trash" size={16} /></button>
                     </div>
                   </li>
                 ))}
@@ -93,9 +92,13 @@ function TxList({ uid, txs, onDeleted, onSelect }: { uid: string; txs: Tx[]; onD
               <button className="btn btn-secondary" disabled={deleting} onClick={() => { if(!deleting){ setPendingDel(null); setDelErr(null);} }}>Cancel</button>
               <button className="btn btn-danger" disabled={deleting} onClick={async () => {
                 if(!pendingDel) return; setDeleting(true); setDelErr(null);
-                try { await enableNetwork(db).catch(()=>{}); await deleteDoc(doc(db, 'users', uid, 'transactions', pendingDel.id)); onDeleted(pendingDel.id); setPendingDel(null); }
+                try {
+                  const { db, doc, deleteDoc } = await (await getFirestoreModule());
+                  await deleteDoc(doc(db, 'users', uid, 'transactions', pendingDel.id));
+                  onDeleted(pendingDel.id); setPendingDel(null);
+                }
                 catch(e:any){ setDelErr(e?.code||e?.message||'error'); }
-                finally { setDeleting(false); disableNetwork(db).catch(()=>{}); }
+                finally { setDeleting(false); }
               }}>{deleting ? 'Deleting…':'Delete'}</button>
             </div>
           </div>
@@ -105,48 +108,51 @@ function TxList({ uid, txs, onDeleted, onSelect }: { uid: string; txs: Tx[]; onD
   );
 }
 
-function MonthlyChart({ txs }: { txs: Tx[] }) {
+function MonthlyChart({ txs, dimension }: { txs: Tx[]; dimension: 'category' | 'payment' }) {
   const now = new Date();
-  const { categories } = useSettings();
+  const { categories, paymentMethods } = useSettings();
+  const keys = dimension === 'category' ? categories : paymentMethods;
   const legacyCategoryMap: Record<string, CategoryId> = { food: 'hawker', coffee: 'cafe', groceries: 'others' };
-  const months: { key: string; year: number; month: number; label: string; labelShort: string; total: number; perCat: Record<CategoryId, number>; isCurrent: boolean }[] = [];
+  const months: { key: string; year: number; month: number; label: string; labelShort: string; total: number; perKey: Record<string, number>; isCurrent: boolean }[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${d.getMonth()}`;
-  // Initialize perCat map dynamically
-  const perCatInit: Record<string, number> = {};
-  for (const c of categories) perCatInit[c] = 0;
-  months.push({ key, year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleString(undefined,{month:'short', year:'2-digit'}), labelShort: d.toLocaleString(undefined,{month:'short'}).replace(/\.$/, ''), total:0, perCat: perCatInit as Record<CategoryId, number>, isCurrent: i===0 });
+    // Initialize perKey map dynamically (categories or payment methods)
+    const perInit: Record<string, number> = {};
+    for (const k of keys) perInit[k] = 0;
+    months.push({ key, year: d.getFullYear(), month: d.getMonth(), label: d.toLocaleString(undefined,{month:'short', year:'2-digit'}), labelShort: d.toLocaleString(undefined,{month:'short'}).replace(/\.$/, ''), total:0, perKey: perInit, isCurrent: i===0 });
   }
   for (const t of txs) {
     const d = new Date(t.date?.toDate?.() ?? t.date);
     const slot = months.find(m => m.year === d.getFullYear() && m.month === d.getMonth());
     if (slot) {
       const amt = t.amount||0; slot.total += amt;
-      let cat: any = (t as any).categoryId;
-      cat = legacyCategoryMap[cat] || cat;
-      if (!categories.includes(cat)) {
-        // Add unknown category bucket dynamically
-        if (!(cat in slot.perCat)) {
-          for (const m of months) { (m.perCat as any)[cat] = 0; }
-        }
+      let keyVal: string;
+      if (dimension === 'category') {
+        keyVal = legacyCategoryMap[(t as any).categoryId] || (t as any).categoryId;
+      } else {
+        keyVal = (t as any).paymentMethod || 'unknown';
       }
-      slot.perCat[cat as CategoryId] += amt;
+      if (!keys.includes(keyVal)) {
+        // Add unknown bucket dynamically across months
+        for (const m of months) { if (!(keyVal in m.perKey)) (m.perKey as any)[keyVal] = 0; }
+      }
+      slot.perKey[keyVal] += amt;
     }
   }
   const past5 = months.slice(0,5);
   const avg = past5.reduce((s,m)=> s+m.total,0)/(past5.length||1);
   const maxVal = Math.max(avg, ...months.map(m=>m.total), 1);
   return (
-    <div className="monthly-chart-wrap" aria-label="Spending last 6 months">
+  <div className="monthly-chart-wrap" aria-label="Spending last 6 months">
       <div className="category-legend" aria-hidden={false}>
-        {categories.map(c => {
-          const friendly = c.replace(/_/g,' ');
+        {keys.map(k => {
+          const friendly = k.replace(/_/g,' ');
           const label = friendly.charAt(0).toUpperCase() + friendly.slice(1);
-          const className = `swatch cat-${c}`;
-          const needsInline = typeof document !== 'undefined' && !document.querySelector(`.seg.cat-${CSS.escape?.(c)}`) && !/^(coffeeshop|hawker|food_centre|cafe|restaurant|buffet|others)$/.test(c);
-          const style = needsInline ? { background: categoryGradient(c) } : undefined;
-          return <div key={c} className="legend-item"><span className={className} style={style} />{label}</div>;
+          const className = `swatch cat-${k}`;
+          const needsInline = typeof document !== 'undefined' && !document.querySelector(`.seg.cat-${CSS.escape?.(k)}`) && !(dimension==='category' && /^(coffeeshop|hawker|food_centre|cafe|restaurant|buffet|others)$/.test(k));
+          const style = needsInline ? { background: categoryGradient(k) } : undefined;
+          return <div key={k} className="legend-item"><span className={className} style={style} />{label}</div>;
         })}
       </div>
       <div className="monthly-chart" role="img" aria-hidden={false}>
@@ -154,7 +160,7 @@ function MonthlyChart({ txs }: { txs: Tx[] }) {
           <div key={m.key} className={"monthly-chart-bar" + (m.isCurrent ? ' current':'')} aria-label={`${m.label} $${m.total.toFixed(2)}`} tabIndex={0} title={`${m.label}: $${m.total.toFixed(2)}`}> 
             {m.total>0 && (
               <div className="bar-outer" style={{ height:`${(m.total / maxVal)*100}%`, minHeight:4 }}>
-                {categories.map(cat => { const v=m.perCat[cat]; if(!v) return null; const className = `seg cat-${cat}`; const dynamic = !/^(coffeeshop|hawker|food_centre|cafe|restaurant|buffet|others)$/.test(cat); const style = dynamic ? { flex:v, background: categoryGradient(cat) } : { flex:v }; return <div key={cat} className={className} style={style} aria-hidden="true" />; })}
+                {keys.map(k => { const v=m.perKey[k]; if(!v) return null; const className = `seg cat-${k}`; const dynamic = !(dimension==='category' && /^(coffeeshop|hawker|food_centre|cafe|restaurant|buffet|others)$/.test(k)); const style = dynamic ? { flex:v, background: categoryGradient(k) } : { flex:v }; return <div key={k} className={className} style={style} aria-hidden="true" />; })}
               </div>
             )}
             <div className="bar-tooltip" role="tooltip">${m.total.toFixed(2)}</div>
@@ -206,8 +212,7 @@ function SeedCleanup({ uid, txs, onDeleted }: { uid: string; txs: Tx[]; onDelete
           if (!confirm(`Delete ${seedTxs.length} seed transaction${seedTxs.length!==1?'s':''}? This cannot be undone.`)) return;
           setRemoving(true); setErr(null); setDoneCount(0);
           try {
-            await enableNetwork(db).catch(()=>{});
-            // Query fresh to ensure we catch any not in local state
+            const { db, query, collection, where, getDocs, writeBatch } = await (await getFirestoreModule());
             const seedQ = query(collection(db, 'users', uid, 'transactions'), where('note','==','seed'));
             const snap = await getDocs(seedQ as any);
             let batch = writeBatch(db as any);
@@ -223,7 +228,6 @@ function SeedCleanup({ uid, txs, onDeleted }: { uid: string; txs: Tx[]; onDelete
           } catch (e:any) {
             setErr(e?.code||e?.message||'cleanup-failed');
           } finally {
-            disableNetwork(db).catch(()=>{});
             setRemoving(false);
           }
         }}>{removing ? 'Removing…' : 'Remove Seed Data'}</button>

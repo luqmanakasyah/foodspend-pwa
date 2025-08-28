@@ -9,13 +9,14 @@
     "preview": "vite preview",
     "serve": "vite preview",
     "deploy": "npm run build && firebase deploy --only hosting",
-  "deploy:all": "npm run build && firebase deploy --only hosting,firestore",
-  "firestore:reset:users": "firebase firestore:delete -r --force users --project spendtrack-x",
-  "firestore:reset:all": "firebase firestore:delete --all-collections --force --project spendtrack-x"
+    "deploy:all": "npm run build && firebase deploy --only hosting,firestore",
+    "firestore:reset:users": "firebase firestore:delete -r --force users --project spendtrack-x",
+    "firestore:reset:all": "firebase firestore:delete --all-collections --force --project spendtrack-x"
   },
   "dependencies": {
     "firebase": "10.14.1",
     "idb": "^7.1.1",
+    "lucide-react": "0.378.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
