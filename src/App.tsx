@@ -5,6 +5,8 @@ import { TopBar } from './components/TopBar';
 import { AuthScreen } from './components/AuthScreen';
 import { AddTxForm } from './components/AddTxForm';
 import { EditTxForm } from './components/EditTxForm';
+import { SettingsProvider } from './lib/settings';
+import { SettingsDrawer } from './components/SettingsDrawer';
 const HomeView = React.lazy(() => import('./HomeView'));
 
 export default function App() {
@@ -15,6 +17,7 @@ export default function App() {
   const [loadingTxs, setLoadingTxs] = useState(false);
   const [view, setView] = useState<'home' | 'add' | 'edit'>('home');
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -91,45 +94,49 @@ export default function App() {
   };
 
   return (
-    <div className="app-container fade-in">
-      <TopBar
-        name={user.displayName ?? 'You'}
-        onSignOut={() => signOut(auth)}
-        onAdd={() => setView('add')}
-        onRefresh={manualRefresh}
-        refreshing={loadingTxs}
-        showActions={view === 'home'}
-  onHome={() => { setView('home'); setEditingTx(null); }}
-        view={view}
-      />
-      {view === 'home' && (
-        <Suspense fallback={<div className="card" style={{ padding:20 }}>Loading…</div>}>
-          <HomeView
-            uid={user.uid}
-            txs={txs}
-            onDeleted={(id) => setTxs(prev => prev.filter(t => t.id !== id))}
-            onSelect={(tx) => { setEditingTx(tx); setView('edit'); }}
-          />
-          {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
-          <DataResetCard uid={user.uid} onCleared={() => setTxs([])} />
-        </Suspense>
-      )}
-      {view === 'add' && (
-        <AddTxForm uid={user.uid} onAdded={handleAdded} onCancel={() => setView('home')} />
-      )}
-      {view === 'edit' && editingTx && (
-        <EditTxForm
-          uid={user.uid}
-          tx={editingTx}
-          onCancel={() => { setEditingTx(null); setView('home'); }}
-          onSaved={(updated) => {
-            setTxs(prev => prev.map(t => t.id === updated.id ? updated : t));
-            setEditingTx(null);
-            setView('home');
-          }}
+    <SettingsProvider>
+      <div className="app-container fade-in">
+        <TopBar
+          name={user.displayName ?? 'You'}
+          onSignOut={() => signOut(auth)}
+          onAdd={() => setView('add')}
+          onRefresh={manualRefresh}
+          refreshing={loadingTxs}
+          showActions={view === 'home'}
+          onHome={() => { setView('home'); setEditingTx(null); }}
+          view={view}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
-      )}
-    </div>
+        <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        {view === 'home' && (
+          <Suspense fallback={<div className="card" style={{ padding:20 }}>Loading…</div>}>
+            <HomeView
+              uid={user.uid}
+              txs={txs}
+              onDeleted={(id) => setTxs(prev => prev.filter(t => t.id !== id))}
+              onSelect={(tx) => { setEditingTx(tx); setView('edit'); }}
+            />
+            {txErr && <div className="alert-error fade-in" style={{ marginTop:12 }}>Load error: {txErr}</div>}
+            <DataResetCard uid={user.uid} onCleared={() => setTxs([])} />
+          </Suspense>
+        )}
+        {view === 'add' && (
+          <AddTxForm uid={user.uid} onAdded={handleAdded} onCancel={() => setView('home')} />
+        )}
+        {view === 'edit' && editingTx && (
+          <EditTxForm
+            uid={user.uid}
+            tx={editingTx}
+            onCancel={() => { setEditingTx(null); setView('home'); }}
+            onSaved={(updated) => {
+              setTxs(prev => prev.map(t => t.id === updated.id ? updated : t));
+              setEditingTx(null);
+              setView('home');
+            }}
+          />
+        )}
+      </div>
+    </SettingsProvider>
   );
 }
 

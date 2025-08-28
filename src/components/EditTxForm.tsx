@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { enableNetwork, disableNetwork, db, doc, serverTimestamp, Timestamp } from '../lib/firebase';
 import type { Tx, CategoryId, PaymentMethod } from '../types';
 import { normalizeCategory, normalizePaymentMethod } from '../lib/normalize';
+import { useSettings } from '../lib/settings';
 
 interface Props { uid: string; tx: Tx; onCancel: () => void; onSaved: (tx: Tx) => void; }
 
@@ -12,11 +13,12 @@ export function EditTxForm({ uid, tx, onCancel, onSaved }: Props) {
   const initialCat = legacyCategoryMap[(tx as any).categoryId] || (tx.categoryId as any);
   const legacyCat = (tx.categoryId as any);
   const normalizedCat: CategoryId = normalizeCategory(legacyCat);
+  const { categories, paymentMethods } = useSettings();
   const [categoryId, setCategoryId] = useState<CategoryId>(normalizedCat);
   const [vendor, setVendor] = useState(tx.vendor || '');
   // Normalize legacy 'ewallet' -> 'qr'
   const legacyPm = normalizePaymentMethod(tx.paymentMethod as any);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>((legacyPm as PaymentMethod) || 'card');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>((legacyPm as PaymentMethod) || paymentMethods[0] || 'card');
   const [note, setNote] = useState(tx.note || '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -66,13 +68,7 @@ export function EditTxForm({ uid, tx, onCancel, onSaved }: Props) {
             <label>Category</label>
             <div className="field-input">
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value as CategoryId)}>
-                <option value="coffeeshop">Coffeeshop</option>
-                <option value="hawker">Hawker</option>
-                <option value="food_centre">Food Centre</option>
-                <option value="cafe">Cafe</option>
-                <option value="restaurant">Restaurant</option>
-                <option value="buffet">Buffet</option>
-                <option value="others">Others</option>
+                {categories.map(c => <option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}
               </select>
             </div>
           </div>
@@ -80,9 +76,7 @@ export function EditTxForm({ uid, tx, onCancel, onSaved }: Props) {
             <label>Payment</label>
             <div className="field-input">
               <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
-                <option value="card">Card</option>
-                <option value="qr">QR Payment</option>
-                <option value="cash">Cash</option>
+                {paymentMethods.map(p => <option key={p} value={p}>{p.replace(/_/g,' ')}</option>)}
               </select>
             </div>
           </div>

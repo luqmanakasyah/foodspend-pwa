@@ -1,22 +1,21 @@
 import type { CategoryId, PaymentMethod } from '../types';
+import { DEFAULT_CATEGORIES, DEFAULT_PAYMENT_METHODS } from '../types';
 
-const CATEGORY_SET: Set<CategoryId> = new Set([
-  'coffeeshop','hawker','food_centre','cafe','restaurant','buffet','others'
-]);
+const LEGACY_CATEGORY_MAP: Record<string, CategoryId> = {
+  food: 'hawker', coffee: 'cafe', groceries: 'others'
+};
 
 export function normalizeCategory(value: string): CategoryId {
-  if (CATEGORY_SET.has(value as CategoryId)) return value as CategoryId;
-  // Legacy mappings (best-effort) -> Others if ambiguous
-  switch (value) {
-    case 'food': return 'hawker';
-    case 'coffee': return 'cafe';
-    case 'groceries': return 'others';
-    default: return 'others';
-  }
+  if (!value) return 'others';
+  if (DEFAULT_CATEGORIES.includes(value)) return value;
+  if (LEGACY_CATEGORY_MAP[value]) return LEGACY_CATEGORY_MAP[value];
+  // Allow custom user-defined category labels (lowercase slug form internally)
+  return value.trim().toLowerCase().replace(/\s+/g,'_');
 }
 
 export function normalizePaymentMethod(value: string): PaymentMethod {
+  if (!value) return 'card';
   if (value === 'ewallet') return 'qr';
-  if (value === 'qr' || value === 'card' || value === 'cash') return value as PaymentMethod;
-  return 'card';
+  if (DEFAULT_PAYMENT_METHODS.includes(value)) return value;
+  return value.trim().toLowerCase().replace(/\s+/g,'_');
 }

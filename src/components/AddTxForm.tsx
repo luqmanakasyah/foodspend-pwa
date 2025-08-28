@@ -2,15 +2,17 @@ import React, { useMemo, useState } from 'react';
 import { collection, addDoc, serverTimestamp, Timestamp, enableNetwork, disableNetwork, db } from '../lib/firebase';
 import type { Tx, CategoryId, PaymentMethod } from '../types';
 import { normalizeCategory, normalizePaymentMethod } from '../lib/normalize';
+import { useSettings } from '../lib/settings';
 
 interface Props { uid: string; onAdded: (tx: Tx) => void; onCancel: () => void; }
 
 export function AddTxForm({ uid, onAdded, onCancel }: Props) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [categoryId, setCategoryId] = useState<CategoryId>('coffeeshop');
+  const { categories, paymentMethods } = useSettings();
+  const [categoryId, setCategoryId] = useState<CategoryId>(categories[0] || 'coffeeshop');
   const [vendor, setVendor] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(paymentMethods[0] || 'card');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -62,13 +64,7 @@ export function AddTxForm({ uid, onAdded, onCancel }: Props) {
             <label>Category</label>
             <div className="field-input">
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value as CategoryId)}>
-                <option value="coffeeshop">Coffeeshop</option>
-                <option value="hawker">Hawker</option>
-                <option value="food_centre">Food Centre</option>
-                <option value="cafe">Cafe</option>
-                <option value="restaurant">Restaurant</option>
-                <option value="buffet">Buffet</option>
-                <option value="others">Others</option>
+                {categories.map(c => <option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}
               </select>
             </div>
           </div>
@@ -76,9 +72,7 @@ export function AddTxForm({ uid, onAdded, onCancel }: Props) {
             <label>Payment</label>
             <div className="field-input">
               <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
-                <option value="card">Card</option>
-                <option value="qr">QR Payment</option>
-                <option value="cash">Cash</option>
+                {paymentMethods.map(p => <option key={p} value={p}>{p.replace(/_/g,' ')}</option>)}
               </select>
             </div>
           </div>
