@@ -3,7 +3,11 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut,
   browserLocalPersistence, browserSessionPersistence, inMemoryPersistence, getRedirectResult
 } from 'firebase/auth';
-// Firestore removed from this eager bundle; use firebase-lite for Firestore access.
+import {
+  initializeFirestore, serverTimestamp, Timestamp,
+  collection, addDoc, query, orderBy, doc, deleteDoc, setLogLevel, getDocs,
+  disableNetwork, enableNetwork, updateDoc, where, writeBatch
+} from 'firebase/firestore';
 
 // Firebase config inserted (public keys are safe to expose in client code)
 const firebaseConfig = {
@@ -30,7 +34,23 @@ const search = typeof window !== 'undefined' ? window.location.search : '';
 const forceFlag = /[?&]fsforce=1/.test(search);
 const disablePersistFlag = /[?&]persist=0/.test(search);
 // Force long polling on iOS/Safari (400 channel issues) or if user explicitly requests.
-// Firestore init & logging intentionally omitted here.
+const forceLP = forceFlag || (isIOS && isSafari);
+const initSettings: any = forceLP
+  ? { experimentalForceLongPolling: true, useFetchStreams: false }
+  : { experimentalAutoDetectLongPolling: isIOS || isSafari };
+export const db = initializeFirestore(app, initSettings);
+console.info('[fs] Firestore init', { forceLP, settings: initSettings });
+
+// Requirement: skip persistence to avoid background listeners / connections.
+console.info('[fs] persistence disabled by configuration');
+
+// Optional verbose Firestore debug if URL contains ?fsdebug=1
+try {
+  if (typeof window !== 'undefined' && /[?&]fsdebug=1/.test(window.location.search)) {
+    setLogLevel('debug');
+    console.info('[fs] debug log level enabled');
+  }
+} catch {}
 
 // Lazy analytics init (avoid SSR / unsupported environments issues)
 // Optional analytics: only if analytics module installed (firebase includes it) and environment supports.
@@ -50,6 +70,10 @@ if (typeof window !== 'undefined') {
 // Provider factory (avoid stale instance issues in some iOS Safari environments)
 export const getGoogleProvider = () => new GoogleAuthProvider();
 export const providers = { get google() { return getGoogleProvider(); } } as const;
-export { signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut };
+export {
+  signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut, serverTimestamp, Timestamp,
+  collection, addDoc, query, orderBy, doc, deleteDoc, getDocs, disableNetwork, enableNetwork, updateDoc,
+  where, writeBatch
+};
 export { browserLocalPersistence, browserSessionPersistence, inMemoryPersistence, getRedirectResult };
 export { analytics };
