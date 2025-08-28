@@ -150,8 +150,9 @@ function MonthlyChart({ txs, dimension }: { txs: Tx[]; dimension: 'category' | '
         {keys.map(k => {
           const label = displayLabel(k);
           const className = `swatch cat-${k}`;
-          const needsInline = typeof document !== 'undefined' && !document.querySelector(`.seg.cat-${CSS.escape?.(k)}`) && !(dimension==='category' && /^(coffeeshop|hawker|food_centre|cafe|restaurant|buffet|others)$/.test(k));
-          const style = needsInline ? { background: categoryGradient(k) } : undefined;
+          const isPredefined = dimension==='category' && /^(coffeeshop|hawker|food_centre|cafe|restaurant|buffet|others)$/.test(k);
+          // Always apply inline gradient for non-predefined categories and all payment methods
+          const style = !isPredefined ? { background: categoryGradient(k) } : undefined;
           return <div key={k} className="legend-item"><span className={className} style={style} />{label}</div>;
         })}
       </div>

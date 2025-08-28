@@ -167,6 +167,8 @@ input:active, select:active { background: var(--color-surface); }
 .dropdown-menu .menu-item { background:transparent; border:1px solid var(--color-border); color:var(--color-text-dim); padding:.45rem .55rem; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:8px; font:inherit; font-size:.75rem; letter-spacing:.3px; }
 .dropdown-menu .menu-item:hover:not(:disabled) { background: var(--color-surface-alt); color: var(--color-text); border-color: var(--color-border-strong); }
 .dropdown-menu .menu-item:disabled { opacity:.5; cursor:not-allowed; }
+.dropdown-menu .menu-item.icon-only { padding:.45rem; width:38px; height:38px; justify-content:center; gap:0; }
+.dropdown-menu { backdrop-filter: blur(6px); }
 
 /* Monthly chart */
 .monthly-chart-wrap { position:relative; margin:0 0 20px; width:100%; }
@@ -190,7 +192,7 @@ input:active, select:active { background: var(--color-surface); }
   .topbar-actions { flex-wrap:wrap; }
 }
 @media (max-width:480px) {
-  .category-legend { justify-content:flex-start; flex-wrap:wrap; overflow-x:visible; white-space:normal; }
+  .category-legend { justify-content:center; flex-wrap:wrap; overflow-x:visible; white-space:normal; }
 }
 
 /* Ensure dropdown doesn't force horizontal scroll */
