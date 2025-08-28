@@ -1,41 +1,76 @@
-const CACHE = 'foodspend-v2';
-const ASSETS = ['/', '/index.html', '/manifest.webmanifest'];
+// Version injected at build time via Vite define plugin.
+/* global __APP_VERSION__ */
+const VERSION = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev');
+const CACHE = `foodspend-${VERSION}`;
+const STATIC_ASSETS = ['/manifest.webmanifest']; // index.html handled with network-first
 
-self.addEventListener('install', (e) => {
-  e.waitUntil((async () => {
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    await cache.addAll(ASSETS);
+    await cache.addAll(STATIC_ASSETS);
     self.skipWaiting();
   })());
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil((async () => {
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
-    self.clients.claim();
+    await self.clients.claim();
   })());
 });
 
-// Only handle same-origin GET requests to avoid interfering with Google Auth / other third-party flows.
-self.addEventListener('fetch', (e) => {
-  const { request } = e;
-  if (request.method !== 'GET') return;
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // ignore cross-origin (auth endpoints, analytics, etc.)
-  e.respondWith((async () => {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    try {
-      const res = await fetch(request);
-      // Skip caching opaque responses just in case
-      if (res && res.type === 'basic') {
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+// Strategy summary:
+// 1. Navigation requests (index.html) => network-first, fall back to cache
+// 2. Hashed build assets (/assets/) => cache-first (runtime cached)
+// 3. Other same-origin GET => stale-while-revalidate
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  // Navigation (SPA entry)
+  if (req.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(req);
         const cache = await caches.open(CACHE);
-        cache.put(request, res.clone());
+        cache.put('/index.html', fresh.clone());
+        return fresh;
+      } catch {
+        const cache = await caches.open(CACHE);
+        return (await cache.match('/index.html')) || Response.error();
       }
+    })());
+    return;
+  }
+
+  // Hashed assets
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      const cached = await cache.match(req);
+      if (cached) return cached;
+      const res = await fetch(req);
+      if (res && res.status === 200) cache.put(req, res.clone());
       return res;
-    } catch (err) {
-      return cached || Response.error();
-    }
+    })());
+    return;
+  }
+
+  // Default: stale-while-revalidate
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const cached = await cache.match(req);
+    const fetchPromise = fetch(req).then(res => {
+      if (res && res.status === 200 && res.type === 'basic') cache.put(req, res.clone());
+      return res;
+    }).catch(() => cached);
+    return cached || fetchPromise;
   })());
 });
