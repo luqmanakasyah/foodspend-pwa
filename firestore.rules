@@ -34,6 +34,19 @@ service cloud.firestore {
       match /budgets/{budgetId} {
         allow read, write: if isOwner(uid);
       }
+      // Settings / metadata (e.g., users/{uid}/meta/settings)
+      match /meta/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+    // Explicit duplicate meta rule at root scope (defensive, should be redundant but ensures coverage)
+    match /users/{uid}/meta/{docId} {
+      allow read, write: if isOwner(uid);
+    }
+    // Catch-all for any future simple subcollections under user (still enforces ownership).
+    // More specific rules (e.g., transactions) override this due to higher specificity.
+    match /users/{uid}/{document=**} {
+      allow read, write: if isOwner(uid);
     }
   }
 }
